@@ -54,35 +54,25 @@ def read_group(file):
     return g2s, s2g
 
 
-def read_otu(file):
+def read_anno(file, s2g):
 
-    head = []
     r = {}
 
-    for line in open(file):
-        line = line.strip()
-        if line.startswith("#OTU"):
-            head = line.split("\t")[1::]
+    for line in read_tsv(file, "\t"):
+        try:       
+            sample, seqid = line[0].split("_", 1)
+        except:
+            print("\t".join(line))
             continue
-        if not line or line.startswith("#"):
-            continue
-        line = line.split("\t")
-        temp = []
-        for i in range(1, len(line)-1, 1):
-            if not head[i-1]:
-                continue
-            try:
-                abund = float(line[i])
-            except ValueError:
-                LOG.info("\t".join(line))
-                continue
-        
-            if abund > 0:
-                temp.append(head[i-1])
-        r[line[0]] = temp
 
-    return r, head
+        group = s2g[sample]
+        if group not in r:
+            r[group] = {}
+        if line[1] not in r[group]:
+            r[group][line[1]] = set()
+        r[group][line[1]].add(sample)
 
+    return r
 
 
 def all_true(list1, list2):
@@ -111,6 +101,7 @@ def stat_include_species(data, samples):
     pan = 0
 
     for line in data.values():
+        line = list(line)
         if all_true(samples, line):
             core += 1
             pan += 1
@@ -136,7 +127,7 @@ def simulation_sample(data, samples, number):
 
         cores.append(core)
         pans.append(pan)
-        if n >= 50:
+        if n >= 40:
             break
 
     return sum(cores)*1.0/len(cores), sum(pans)*1.0/len(pans)
@@ -195,35 +186,36 @@ def plot_dual_axis(data, prefix):
  
     font1 = {'family': 'Times New Roman', 'weight': 'normal', 'color': '#212121', 'size': 16}
     ax.set_xlabel('Numbers of samples', font1)
-    ax.set_ylabel('Numbers of totlal OTU level', font1)
+    ax.set_ylabel('Numbers of species', font1)
     plt.legend(loc='upper right', bbox_to_anchor=(1.1,1.0), handlelength=1.0, frameon=False)
-    plt.savefig('%s.otu.png' % prefix, dpi=700)
-    plt.savefig('%s.otu.pdf' % prefix)
+    plt.savefig('%s.species.png' % prefix, dpi=700)
+    plt.savefig('%s.species.pdf' % prefix)
 
 
-def core_pan_otu(otu, group, prefix):
+def core_pan_species(anno, group, prefix):
 
     g2s, s2g = read_group(group)
-    data, all_sample = read_otu(otu)
+    data = read_anno(anno, s2g)
     dcore = {}
     dpan = {}
 
-    for i in g2s:
+    for i in data:
+        spec_dict = data[i]
         samples = list(g2s[i])
-        cores, pans = stat_core_pan(data, samples)
+        cores, pans = stat_core_pan(spec_dict, samples)
         dcore[i] = cores
         dpan[i] = pans
-        print("Group %s\tPan OTU\t%s" % (i, "\t".join(list_float2str(pans))))
-        print("Group %s\tCore OTU\t%s" % (i, "\t".join(list_float2str(cores))))
+        print("Group %s\tPan species\t%s" % (i, "\t".join(list_float2str(pans))))
+        print("Group %s\tCore species\t%s" % (i, "\t".join(list_float2str(cores))))
     plot_dual_axis(dcore, "%s.core" % prefix)
     plot_dual_axis(dpan, "%s.pan" % prefix)
 
-    return dcore, dpan 
+    return r
 
 
 def add_hlep_args(parser):
 
-    parser.add_argument('otu', metavar='FILE', type=str,
+    parser.add_argument('anno', metavar='FILE', type=str,
         help='Input species annotation file.')
     parser.add_argument('-g', '--group', metavar='FILE', type=str, required=True,
         help='Input group file.')
@@ -243,17 +235,17 @@ def main():
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
     description='''
 name:
-    core_pan_otu.py: Calculate the core and pan otu of metagenomics.
+    core_pan_species.py: Calculate the core and pan otu of metagenomics.
 attention:
-    core_pan_otu.py otu_table.txt -g group.list >stat_pan_gene.tsv
-    core_pan_otu.py otu_table.txt -g group.list -p name >stat_pan_gene.tsv
+    core_pan_species.py annotation.xls -g group.list >stat_pan_gene.tsv
+    core_pan_species.py annotation.xls -g group.list -p name >stat_pan_gene.tsv
 version: %s
 contact:  %s <%s>\
         ''' % (__version__, ' '.join(__author__), __email__))
 
     args = add_hlep_args(parser).parse_args()
 
-    core_pan_otu(args.otu, args.group, args.prefix)
+    core_pan_species(args.anno, args.group, args.prefix)
 
 
 if __name__ == "__main__":
